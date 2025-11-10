@@ -41,7 +41,7 @@ jobs:
       - name: Archive logs and .env
         if: always()
         run: |
-          docker-compose logs > docker-compose.log
+          sudo docker-compose logs > docker-compose.log
         continue-on-error: true
 
       - uses: actions/upload-artifact@v4
