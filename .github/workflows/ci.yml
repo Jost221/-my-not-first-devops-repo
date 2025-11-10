@@ -10,50 +10,59 @@ jobs:
   build_and_test:
     runs-on: self-hosted
 
-    env:
-      POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-      POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-
     steps:
       - uses: actions/checkout@v4
 
       - name: Create .env file
         run: |
-          echo "POSTGRES_USER=${{ secrets.POSTGRES_USER }}" >> .env
-          echo "POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}" >> .env
-          echo "POSTGRES_DB=${{ secrets.POSTGRES_DB }}" >> .env
+          cat > .env << EOF
+          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
+          DB_ENGINE=django.db.backends.postgresql
+          DB_HOST=db
+          DB_PORT=5432
+          EOF
+          cat .env
 
-
-      # Подготовка .env файла с секретами
-      - name: Write secrets to .env
-        run: |
-          echo "POSTGRES_USER=${POSTGRES_USER}" >> .env
-          echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" >> .env
-
-      # Запуск docker-compose
       - name: Start services
         run: sudo docker-compose up -d
 
-      # Проверка, что контейнеры работают
-      - name: Check containers status
+      - name: Wait for database
+        run: |
+          echo "Waiting for PostgreSQL..."
+          for i in {1..30}; do
+            if sudo docker-compose exec -T db pg_isready -U "${{ secrets.POSTGRES_USER }}" -d "${{ secrets.POSTGRES_DB }}"; then
+              echo "✓ Database is ready"
+              exit 0
+            fi
+            echo "Attempt $i/30..."
+            sleep 2
+          done
+          echo "✗ Database failed to start"
+          exit 1
+
+      - name: Check containers
         run: sudo docker-compose ps
 
-      # Миграции и тесты Django
-      - name: Run Django tests
-        run: |
-          sudo docker-compose exec -T web python manage.py migrate
-          sudo docker-compose exec -T web python manage.py test
+      - name: Run migrations
+        run: sudo docker-compose exec -T web python manage.py migrate
 
-      # Сохраняем артефакты (например, логи и .env)
-      - name: Archive logs and .env
+      - name: Run tests
+        run: sudo docker-compose exec -T web python manage.py test
+
+      - name: Collect logs
         if: always()
-        run: |
-          sudo docker-compose logs > docker-compose.log
+        run: sudo docker-compose logs > docker-compose.log
         continue-on-error: true
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: logs
-          path: |
-            docker-compose.log
-            .env
+          path: docker-compose.log
+
+      - name: Cleanup
+        if: always()
+        run: sudo docker-compose down -v
