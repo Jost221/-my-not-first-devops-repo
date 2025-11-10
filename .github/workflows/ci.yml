@@ -13,26 +13,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create .env file
+      - name: Create .env file BEFORE docker-compose
         run: |
-          cat > .env << EOF
+          cat > .env << 'EOF'
           POSTGRES_USER=${{ secrets.POSTGRES_USER }}
           POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
           POSTGRES_DB=${{ secrets.POSTGRES_DB }}
           DB_ENGINE=django.db.backends.postgresql
           DB_HOST=db
           DB_PORT=5432
+          ENV=testing
           EOF
+          echo "=== Created .env ===" 
           cat .env
 
       - name: Start services
-        run: sudo docker-compose up -d
+        run: |
+          sudo docker-compose down -v 2>/dev/null || true
+          sudo docker-compose up -d
+          sleep 5
+
+      - name: Show docker-compose logs
+        run: sudo docker-compose logs
+
+      - name: Verify environment variables in container
+        run: |
+          echo "=== Web container environment ===" 
+          sudo docker-compose exec -T web env | grep -E "DB_|POSTGRES_" || echo "No DB vars found!"
+          echo "=== DB container logs ===" 
+          sudo docker-compose logs db | tail -20
 
       - name: Wait for database
         run: |
           echo "Waiting for PostgreSQL..."
           for i in {1..30}; do
-            if sudo docker-compose exec -T db pg_isready -U "${{ secrets.POSTGRES_USER }}" -d "${{ secrets.POSTGRES_DB }}"; then
+            if sudo docker-compose exec -T db pg_isready -U "${{ secrets.POSTGRES_USER }}" -d "${{ secrets.POSTGRES_DB }}" 2>/dev/null; then
               echo "✓ Database is ready"
               exit 0
             fi
@@ -40,28 +55,35 @@ jobs:
             sleep 2
           done
           echo "✗ Database failed to start"
+          sudo docker-compose logs db
           exit 1
 
-      - name: Check containers
-        run: sudo docker-compose ps
-
       - name: Run migrations
-        run: sudo docker-compose exec -T web python manage.py migrate
+        run: |
+          echo "Running migrations..."
+          sudo docker-compose exec -T web python manage.py migrate
 
       - name: Run tests
-        run: sudo docker-compose exec -T web python manage.py test
+        run: |
+          echo "Running tests..."
+          sudo docker-compose exec -T web python manage.py test
 
       - name: Collect logs
         if: always()
-        run: sudo docker-compose logs > docker-compose.log
-        continue-on-error: true
+        run: |
+          sudo docker-compose logs > docker-compose.log
+          sudo docker-compose logs web > web.log
+          sudo docker-compose logs db > db.log
 
       - name: Upload logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: logs
-          path: docker-compose.log
+          path: |
+            docker-compose.log
+            web.log
+            db.log
 
       - name: Cleanup
         if: always()
