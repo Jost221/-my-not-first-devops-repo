@@ -35,7 +35,7 @@ jobs:
         run: |
           sudo docker-compose down -v 2>/dev/null || true
           sudo docker-compose up -d
-          sleep 10
+          sleep 20
 
       - name: Verify containers running
         run: sudo docker-compose ps
