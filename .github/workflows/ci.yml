@@ -26,6 +26,10 @@ jobs:
           EOF
           echo "=== Created .env ===" 
           cat .env
+          echo "=== Debug vars ===" 
+          echo "POSTGRES_USER: ${{ secrets.POSTGRES_USER }}"
+          echo "POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}"
+          echo "POSTGRES_DB: ${{ secrets.POSTGRES_DB }}"
 
       - name: Start services
         run: |
