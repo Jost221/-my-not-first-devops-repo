@@ -1,90 +1,59 @@
-name: Django CI/CD
+name: Django Tests
 
 on:
   push:
-    branches: [main]
+    branches: [ main ]
   pull_request:
-    branches: [main]
+    branches: [ main ]
 
 jobs:
-  build_and_test:
-    runs-on: self-hosted
+  test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: mydb
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
 
     steps:
       - uses: actions/checkout@v4
-
-      - name: Create .env file BEFORE docker-compose
-        run: |
-          cat > .env << 'EOF'
-          POSTGRES_USER=${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB=${{ secrets.POSTGRES_DB }}
-          DB_ENGINE=django.db.backends.postgresql
-          DB_HOST=db
-          DB_PORT=5432
-          ENV=testing
-          EOF
-          echo "=== Created .env ===" 
-          cat .env
-
-      - name: Start services
-        run: |
-          sudo docker-compose down -v 2>/dev/null || true
-          sudo docker-compose up -d
-          sleep 5
-
-      - name: Show docker-compose logs
-        run: sudo docker-compose logs
-
-      - name: Verify environment variables in container
-        run: |
-          echo "=== Web container environment ===" 
-          sudo docker-compose exec -T web env | grep -E "DB_|POSTGRES_" || echo "No DB vars found!"
-          echo "=== DB container logs ===" 
-          sudo docker-compose logs db | tail -20
-
-      - name: Wait for database
-        run: |
-          echo "Waiting for PostgreSQL..."
-          for i in {1..30}; do
-            if sudo docker-compose exec -T db pg_isready -U "${{ secrets.POSTGRES_USER }}" -d "${{ secrets.POSTGRES_DB }}" 2>/dev/null; then
-              echo "✓ Database is ready"
-              exit 0
-            fi
-            echo "Attempt $i/30..."
-            sleep 2
-          done
-          echo "✗ Database failed to start"
-          sudo docker-compose logs db
-          exit 1
-
-      - name: Run migrations
-        run: |
-          echo "Running migrations..."
-          sudo docker-compose exec -T web python manage.py migrate
-
-      - name: Run tests
-        run: |
-          echo "Running tests..."
-          sudo docker-compose exec -T web python manage.py test
-
-      - name: Collect logs
-        if: always()
-        run: |
-          sudo docker-compose logs > docker-compose.log
-          sudo docker-compose logs web > web.log
-          sudo docker-compose logs db > db.log
-
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          name: logs
-          path: |
-            docker-compose.log
-            web.log
-            db.log
-
-      - name: Cleanup
-        if: always()
-        run: sudo docker-compose down -v
+          python-version: '3.9'
+      
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Run migrations
+        env:
+          DB_ENGINE: django.db.backends.postgresql
+          DB_NAME: mydb
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+        run: python manage.py migrate
+      
+      - name: Run tests
+        env:
+          DB_ENGINE: django.db.backends.postgresql
+          DB_NAME: mydb
+          DB_USER: postgres
+          DB_PASSWORD: postgres
+          DB_HOST: localhost
+          DB_PORT: 5432
+        run: python manage.py test
