@@ -29,13 +29,13 @@ jobs:
 
       # Проверка, что контейнеры работают
       - name: Check containers status
-        run: docker-compose ps
+        run: sudo docker-compose ps
 
       # Миграции и тесты Django
       - name: Run Django tests
         run: |
-          docker-compose exec -T web python manage.py migrate
-          docker-compose exec -T web python manage.py test
+          sudo docker-compose exec -T web python manage.py migrate
+          sudo docker-compose exec -T web python manage.py test
 
       # Сохраняем артефакты (например, логи и .env)
       - name: Archive logs and .env
