@@ -33,8 +33,8 @@ jobs:
 
       - name: Start services
         run: |
-          sudo docker-compose down -v 2>/dev/null || true
-          sudo docker-compose up -d
+          sudo docker compose down -v 2>/dev/null || true
+          sudo docker compose up -d
           sleep 20
 
       - name: Verify containers running
@@ -46,15 +46,15 @@ jobs:
       - name: Verify environment variables in container
         run: |
           echo "=== Web container environment ===" 
-          sudo docker-compose exec -T web env | grep -E "DB_|POSTGRES_" || echo "No DB vars found!"
+          sudo docker compose exec -T web env | grep -E "DB_|POSTGRES_" || echo "No DB vars found!"
           echo "=== DB container logs ===" 
-          sudo docker-compose logs db | tail -20
+          sudo docker compose logs db | tail -20
 
       - name: Wait for database
         run: |
           echo "Waiting for PostgreSQL..."
           for i in {1..30}; do
-            if sudo docker-compose exec -T db pg_isready -U "${{ secrets.POSTGRES_USER }}" -d "${{ secrets.POSTGRES_DB }}" 2>/dev/null; then
+            if sudo docker compose exec -T db pg_isready -U "${{ secrets.POSTGRES_USER }}" -d "${{ secrets.POSTGRES_DB }}" 2>/dev/null; then
               echo "✓ Database is ready"
               exit 0
             fi
@@ -62,25 +62,25 @@ jobs:
             sleep 2
           done
           echo "✗ Database failed to start"
-          sudo docker-compose logs db
+          sudo docker compose logs db
           exit 1
 
       - name: Run migrations
         run: |
           echo "Running migrations..."
-          sudo docker-compose exec -T web python manage.py migrate
+          sudo docker compose exec -T web python manage.py migrate
 
       - name: Run tests
         run: |
           echo "Running tests..."
-          sudo docker-compose exec -T web python manage.py test
+          sudo docker compose exec -T web python manage.py test
 
       - name: Collect logs
         if: always()
         run: |
-          sudo docker-compose logs > docker-compose.log
-          sudo docker-compose logs web > web.log
-          sudo docker-compose logs db > db.log
+          sudo docker compose logs > docker-compose.log
+          sudo docker compose logs web > web.log
+          sudo docker compose logs db > db.log
 
       - name: Upload logs
         if: always()
@@ -94,4 +94,4 @@ jobs:
 
       - name: Cleanup
         if: always()
-        run: sudo docker-compose down -v
+        run: sudo docker compose down -v
